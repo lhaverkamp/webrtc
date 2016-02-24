@@ -7,7 +7,6 @@ var rtcOpts = {
 var rtc = RTC(rtcOpts);
 // A div element to show our local video stream
 var localVideo = document.getElementById('l-video');
-console.log(localVideo);
 // A div element to show our remote video streams
 var remoteVideo = document.getElementById('r-video');
 // A contenteditable element to show our messages
@@ -15,7 +14,6 @@ var messageWindow = document.getElementById('messages');
 
 // Bind to events happening on the data channel
 function bindDataChannelEvents(id, channel, attributes, connection) {
-
   // Receive message
   channel.onmessage = function (evt) {
     messageWindow.innerHTML = evt.data;
@@ -34,7 +32,7 @@ function init(session) {
 }
 
 // Display local and remote video streams
-console.log(rtc);
+// TODO need to handle if video or audio isn't supported
 localVideo.appendChild(rtc.local);
 remoteVideo.appendChild(rtc.remote);
 
