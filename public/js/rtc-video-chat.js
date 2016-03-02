@@ -7,9 +7,7 @@ var rtcOpts = {
 	},
 	
 	// specify the location of the signalling server
-    //signaller: 'https://switchboard.rtc.io',
-   	//signaller: 'https://localhost:8443',
-	signaller: 'https://192.168.1.225:3000',
+	signaller: 'wss://' + location.hostname + ':8443',
     
     // room defined by default
 	room: 'test-room',
