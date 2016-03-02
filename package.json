@@ -21,6 +21,8 @@
     "express": "^4.13.3",
     "jade": "^1.11.0",
     "merge": "^1.2.0",
+    "replify": "^1.2.0",
+    "rtc-switchboard": "^3.1.0",
     "ws": "^1.0.0"
   },
   "private": true

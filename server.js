@@ -19,6 +19,34 @@ var options = {
 };
 
 var server = https.createServer(options, app);
-server.listen(config.port, config.hostname, function() {
+server.listen(config.port, config.hostname, function(err) {
+	if(err) {
+		return console.log('Encountered error starting server: ', err);
+	}
+	
 	console.log('Express server listening on %d, in %s mode', config.port, app.get('env'));
+});
+
+var switchboard = require('rtc-switchboard')(server);
+var replify = require('replify');
+
+replify({
+	name: 'switchboard',
+	app: switchboard,
+	contexts: {
+		server: server
+	}
+});
+
+switchboard.on('room:create', function(room) {
+	console.log('room ' + room + ' created, now have ' + switchboard.rooms.length + ' active rooms');
+});
+
+switchboard.on('room:destroy', function(room) {
+	console.log('room ' + room + ' destroyed, now have ' + switchboard.rooms.length + ' active rooms remain');
+	
+	if(typeof gc == 'function') {
+		console.log('gc');
+		gc();
+	}
 });
