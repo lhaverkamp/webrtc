@@ -1,0 +1,29 @@
+{
+  "name": "webrtc",
+  "version": "0.0.1",
+  "description": "Node.js server/client for WebRTC using rtc.io",
+  "keywords": [
+    "rtc.io",
+    "WebRTC"
+  ],
+  "homepage": "https://github.com/lhaverkamp/webrtc#readme",
+  "bugs": {
+    "url": "https://github.com/lhaverkamp/webrtc/issues"
+  },
+  "license": "ISC",
+  "author": "Laura Haverkamp <laura@haverkamp.us>",
+  "main": "server.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lhaverkamp/webrtc.git"
+  },
+  "dependencies": {
+    "express": "^4.13.3",
+    "jade": "^1.11.0",
+    "merge": "^1.2.0",
+    "replify": "^1.2.0",
+    "rtc-switchboard": "^3.1.0",
+    "ws": "^1.0.0"
+  },
+  "private": true
+}

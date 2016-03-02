@@ -1,0 +1,14 @@
+doctype html
+html
+	head
+		style.
+			#messages {
+				border: 1px solid black;
+				min-height: 20px;
+			}
+		script(src='/js/rtc.min.js')
+	body
+		div(id='messages', contenteditable=true)
+		div(id='l-video')
+		div(id='r-video')
+		script(src='/js/rtc-video-chat.js')
