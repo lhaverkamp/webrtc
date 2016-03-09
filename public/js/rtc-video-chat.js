@@ -74,3 +74,28 @@ function init(session) {
 
 // Detect when RTC has established a session
 rtc.on('ready', init);
+
+// Enable/Disable Audio
+function toggleAudio(event) {
+	var video = document.querySelector(rtcOpts.localContainer).querySelector("video");
+	if(video) {
+		video.removeAttribute("muted");
+	}
+	
+	var mediaStreams = rtc.getLocalStreams();
+	if(mediaStreams) {
+		for(var i=0;i<mediaStreams.length;i++) {
+			var audioTracks = mediaStreams[i].getAudioTracks();
+			
+			if(audioTracks[0]) {
+				audioTracks[0].enabled = !audioTracks[0].enabled;
+			}
+		}
+	}
+
+	var icon = event.currentTarget.querySelector("i"); 
+	icon.classList.toggle("fa-microphone");
+	icon.classList.toggle("fa-microphone-slash");
+}
+
+document.getElementById("audio").addEventListener("click", toggleAudio);
