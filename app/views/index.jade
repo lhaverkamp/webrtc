@@ -6,9 +6,29 @@ html
 				border: 1px solid black;
 				min-height: 20px;
 			}
+			#l-video {
+				position: relative;
+			}
+			.controls {
+				position: absolute;
+				bottom: 0;
+				margin: 0 auto;
+				z-index: 1000;
+			}
+			.flex-container {
+				display: flex;
+				flex-flow: row wrap;
+			}
 		script(src='/js/rtc.min.js')
+		link(rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css')
 	body
 		div(id='messages', contenteditable=true)
 		div(id='l-video')
-		div(id='r-video')
+			div(class='controls' class='flex-container')
+				// microphone microphone-slash
+				button(id='audio' class='button button-audio')
+					i(class='fa fa-2x fa-microphone')
+				button(id='video' class='button button-video')
+					i(class='fa fa-2x fa-eye')
+		div(id='r-video' class='flex-container')
 		script(src='/js/rtc-video-chat.js')

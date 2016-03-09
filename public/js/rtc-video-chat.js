@@ -74,3 +74,47 @@ function init(session) {
 
 // Detect when RTC has established a session
 rtc.on('ready', init);
+
+// Enable/Disable Audio Tracks
+function toggleAudio(event) {
+	var video = document.querySelector(rtcOpts.localContainer).querySelector("video");
+	if(video) {
+		video.removeAttribute("muted");
+	}
+	
+	var mediaStreams = rtc.getLocalStreams();
+	if(mediaStreams) {
+		for(var i=0;i<mediaStreams.length;i++) {
+			var audioTracks = mediaStreams[i].getAudioTracks();
+			
+			if(audioTracks[0]) {
+				audioTracks[0].enabled = !audioTracks[0].enabled;
+			}
+		}
+	}
+
+	var icon = event.currentTarget.querySelector("i"); 
+	icon.classList.toggle("fa-microphone");
+	icon.classList.toggle("fa-microphone-slash");
+}
+
+// Enable/Disable Video Trcaks
+function toggleVideo(event) {
+	var mediaStreams = rtc.getLocalStreams();
+	if(mediaStreams) {
+		for(var i=0;i<mediaStreams.length;i++) {
+			var videoTracks = mediaStreams[i].getVideoTracks();
+			
+			if(videoTracks[0]) {
+				videoTracks[0].enabled = !videoTracks[0].enabled;
+			}
+		}
+	}
+
+	var icon = event.currentTarget.querySelector("i"); 
+	icon.classList.toggle("fa-eye");
+	icon.classList.toggle("fa-eye-slash");
+}
+
+document.getElementById("audio").addEventListener("click", toggleAudio);
+document.getElementById("video").addEventListener("click", toggleVideo);
