@@ -1,3 +1,10 @@
+## [1.2.0](https://github.com/lhaverkamp/webrtc/tag/1.2.0) - 2016.03.16
+### Added
+- dynamic room creationg [#1] (https://github.com/lhaverkamp/webrtc/issues/1)
+
+### Changed
+- replaced merge with cog/defaults
+
 ## [1.1.0](https://github.com/lhaverkamp/webrtc/tag/1.1.0) - 2016.03.09
 ### Added
 - ability to Enable/Disable Audio [#2] (https://github.com/lhaverkamp/webrtc/issues/2)
