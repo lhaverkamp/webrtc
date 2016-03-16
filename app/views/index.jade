@@ -1,34 +1,18 @@
 doctype html
 html
 	head
-		style.
-			#messages {
-				border: 1px solid black;
-				min-height: 20px;
-			}
-			#l-video {
-				position: relative;
-			}
-			.controls {
-				position: absolute;
-				bottom: 0;
-				margin: 0 auto;
-				z-index: 1000;
-			}
-			.flex-container {
-				display: flex;
-				flex-flow: row wrap;
-			}
-		script(src='/js/rtc.min.js')
 		link(rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css')
 	body
-		div(id='messages', contenteditable=true)
-		div(id='l-video')
-			div(class='controls' class='flex-container')
-				// microphone microphone-slash
-				button(id='audio' class='button button-audio')
-					i(class='fa fa-2x fa-microphone')
-				button(id='video' class='button button-video')
-					i(class='fa fa-2x fa-eye')
-		div(id='r-video' class='flex-container')
-		script(src='/js/rtc-video-chat.js')
+		div
+			h2 How to Get Started
+			ol
+				li Create a room
+					div Choose any name for your room.
+				li Copy & share the link
+					div Copy the link to the conference and send to those you want to talk to.
+				li Talk together!
+					div Once they click the link, they will join the conference with you.
+		form(action='/join', method='post')
+			label(for='room') Room:
+			input(id='room' name='room', placeholder='my-room-name', required)
+			button(type='submit') Start

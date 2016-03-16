@@ -1,5 +1,5 @@
 var fs = require('fs'),
-	merge = require('merge'),
+	defaults = require('cog/defaults'),
 	path = require('path');
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
@@ -12,7 +12,8 @@ var all = {
 	cert: './app/config/keys/server.crt'
 };
 
-var config = merge(
+var config = defaults(
+	{},
 	all,
 	fs.readFileSync(path.join(__dirname, process.env.NODE_ENV + ".json"))
 ); 
