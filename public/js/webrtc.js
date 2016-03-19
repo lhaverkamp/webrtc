@@ -294,8 +294,8 @@ Rtc.prototype.handleError = function(err) {
 };
 
 Rtc.prototype.toggleAudio = function(event) {
-	if(window.stream) {
-		var audioTracks = window.stream.getAudioTracks();
+	if(window.localStream) {
+		var audioTracks = window.localStream.getAudioTracks();
 	
 		if(audioTracks[0]) {
 			audioTracks[0].enabled = !audioTracks[0].enabled;
@@ -308,8 +308,8 @@ Rtc.prototype.toggleAudio = function(event) {
 };
 
 Rtc.prototype.toggleVideo = function(event) {
-	if(window.stream) {
-		var videoTracks = window.stream.getVideoTracks();
+	if(window.localStream) {
+		var videoTracks = window.localStream.getVideoTracks();
 		
 		if(videoTracks[0]) {
 			videoTracks[0].enabled = !videoTracks[0].enabled;
