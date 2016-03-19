@@ -19,19 +19,12 @@ html
 				display: flex;
 				flex-flow: row wrap;
 			}
-		script(src='/js/rtc.min.js')
-		link(rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css')
-	body
-		div(id='messages', contenteditable=true)
-		div(id='l-video')
-			div(class='controls' class='flex-container')
-				// microphone microphone-slash
-				button(id='audio' class='button button-audio')
-					i(class='fa fa-2x fa-microphone')
-				button(id='video' class='button button-video')
-					i(class='fa fa-2x fa-eye')
-		div(id='r-video' class='flex-container')
+		script(src='/socket.io/socket.io.js')
+		//script(src='/js/rtc.min.js')
 		script.
+			var L_VIDEO = "#l-video";
+			var R_VIDEO = "#r-video";
+
 			// Set RTC options.
 			var rtcOpts = {
 				// simple constraints for the defaults
@@ -63,92 +56,19 @@ html
 				// the selector that will be used to identify the remote video container
 				remoteContainer: '#r-video',
 				
-				// should we attempt to load any plugins?
-				plugins: [],
-				
 				// common options overrides that are used across the rtc.io packages
 				options: {}
 			};
-			
-			// call RTC module
-			var rtc = RTC(rtcOpts);
-			
-			// A contenteditable element to show our messages
-			var messageWindow = document.getElementById('messages');
-			
-			// Bind to events happening on the data channel
-			function bindDataChannelEvents(id, channel, attributes, connection) {
-			  // Receive message
-			  channel.onmessage = function (evt) {
-			    messageWindow.innerHTML = evt.data;
-			  };
-			
-			  // Send message
-			  messageWindow.onkeyup = function () {
-			    channel.send(this.innerHTML);
-			  };
-			}
-			
-			// Start working with the established session
-			function init(session) {
-				session.createDataChannel('chat');
-				session.on('channel:opened:chat', bindDataChannelEvents);
-			  
-				// connected
-				// disconnected
-				// local:announce
-				// peer:filter
-				// peer:connected
-				// peer:announce
-				// peer:update
-				// message:<command>
-				session.on('call:started', callStarted);
-				session.on('call:ended', callEnded);
-			}
-			
-			// Detect when RTC has established a session
-			rtc.on('ready', init);
-			
-			// Enable/Disable Audio Tracks
-			function toggleAudio(event) {
-				var video = document.querySelector(rtcOpts.localContainer).querySelector("video");
-				if(video) {
-					video.removeAttribute("muted");
-				}
-				
-				var mediaStreams = rtc.getLocalStreams();
-				if(mediaStreams) {
-					for(var i=0;i<mediaStreams.length;i++) {
-						var audioTracks = mediaStreams[i].getAudioTracks();
-						
-						if(audioTracks[0]) {
-							audioTracks[0].enabled = !audioTracks[0].enabled;
-						}
-					}
-				}
-			
-				var icon = event.currentTarget.querySelector("i"); 
-				icon.classList.toggle("fa-microphone");
-				icon.classList.toggle("fa-microphone-slash");
-			}
-			
-			// Enable/Disable Video Tracks
-			function toggleVideo(event) {
-				var mediaStreams = rtc.getLocalStreams();
-				if(mediaStreams) {
-					for(var i=0;i<mediaStreams.length;i++) {
-						var videoTracks = mediaStreams[i].getVideoTracks();
-						
-						if(videoTracks[0]) {
-							videoTracks[0].enabled = !videoTracks[0].enabled;
-						}
-					}
-				}
-			
-				var icon = event.currentTarget.querySelector("i"); 
-				icon.classList.toggle("fa-eye");
-				icon.classList.toggle("fa-eye-slash");
-			}
-			
-			document.getElementById("audio").addEventListener("click", toggleAudio);
-			document.getElementById("video").addEventListener("click", toggleVideo);
+		link(rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css')
+	body
+		div(id='messages', contenteditable=true)
+		div(id='l-video')
+			div(class='controls' class='flex-container')
+				// microphone microphone-slash
+				button(id='audio' class='button button-audio')
+					i(class='fa fa-2x fa-microphone')
+				button(id='video' class='button button-video')
+					i(class='fa fa-2x fa-eye')
+		div(id='r-video' class='flex-container')
+		//script(src='/js/rtc-video-chat.js')
+		script(src='/js/webrtc.js')
