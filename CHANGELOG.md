@@ -1,6 +1,6 @@
 ## [1.2.0](https://github.com/lhaverkamp/webrtc/tag/1.2.0) - 2016.03.16
 ### Added
-- dynamic room creationg [#1] (https://github.com/lhaverkamp/webrtc/issues/1)
+- dynamic room creation [#1] (https://github.com/lhaverkamp/webrtc/issues/1)
 
 ### Changed
 - replaced merge with cog/defaults

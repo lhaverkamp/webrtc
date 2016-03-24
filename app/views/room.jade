@@ -1,30 +1,10 @@
 doctype html
 html
 	head
-		style.
-			#messages {
-				border: 1px solid black;
-				min-height: 20px;
-			}
-			#l-video {
-				position: relative;
-			}
-			.controls {
-				position: absolute;
-				bottom: 0;
-				margin: 0 auto;
-				z-index: 1000;
-			}
-			.flex-container {
-				display: flex;
-				flex-flow: row wrap;
-			}
+		link(rel='stylesheet' type='text/css' href='/css/rtc.css')
 		script(src='/socket.io/socket.io.js')
-		//script(src='/js/rtc.min.js')
+		script(src='/js/adapter-latest.js')
 		script.
-			var L_VIDEO = "#l-video";
-			var R_VIDEO = "#r-video";
-
 			// Set RTC options.
 			var rtcOpts = {
 				// simple constraints for the defaults
@@ -51,24 +31,22 @@ html
 				},
 				
 				// the selector that will be used to identify the local video container
-				localContainer: '#l-video',
+				localContainer: '.video-container',
 				
 				// the selector that will be used to identify the remote video container
-				remoteContainer: '#r-video',
+				remoteContainer: '.video-container',
 				
-				// common options overrides that are used across the rtc.io packages
-				options: {}
+				// options overrides
+				options: {
+				}
 			};
 		link(rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/font-awesome/4.5.0/css/font-awesome.min.css')
 	body
-		div(id='messages', contenteditable=true)
-		div(id='l-video')
-			div(class='controls' class='flex-container')
-				// microphone microphone-slash
-				button(id='audio' class='button button-audio')
-					i(class='fa fa-2x fa-microphone')
-				button(id='video' class='button button-video')
-					i(class='fa fa-2x fa-eye')
-		div(id='r-video' class='flex-container')
-		//script(src='/js/rtc-video-chat.js')
-		script(src='/js/webrtc.js')
+		div(class='room-container')
+			div(class='video-container')
+			div(class='chat-container')
+				div(class='message-container' contenteditable=true)
+				div(class='chat-controls')
+					input(class='chat-message' type='text' placeholder='input text here')
+					button(class='button send-button' data-action='message') Send
+		script(src='/js/rtc.js')

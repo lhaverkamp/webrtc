@@ -34,10 +34,3 @@ server.listen(config.port, config.hostname, function(err) {
 });
 
 var switchboard = require('./app/routes/sockets')(server);
-
-/*
-var switchboard = require('./switchboard.js')(server);
-switchboard.on('data', function(data, peerId, spark) {
-	console.log({ peer: peerId }, 'received: ' + data);
-});
-*/
