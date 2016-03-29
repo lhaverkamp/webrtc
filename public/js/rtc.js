@@ -6,20 +6,23 @@ var defaultConfig = {
 	},
 		
 	// specify the location of the signalling server
-	signaller: 'wss://' + location.hostname + ':8443',
-	    
+	signaller: 'wss://' + location.hostname + ':3000',
+	
     // room defined by default
 	room: null,
 		
-	// specify ice servers or a generator function to create ice servers
-	ice: [],
-		
-	// any data channels that we want to create for the conference by default
-	// a chat channel is created, but other channels can be added also
-	// additional options can be supplied to customize the data channel config
-	// see: <https://w3c.github.io/webrtc-pc/#idl-def-RTCDataChannelInit>
+	// specify ice servers
+	ice: [
+	      { url: "stun:stun.l.google.com:19302" }
+	],
+
+	// data channel configuration
 	channels: {
-		chat: true
+		chat: true,
+		optional: [
+		    { DtlsSrtpKeyAgreement: true },
+		    { RtcDataChannels: true } // most examples show RtpDataChannels but that appears to be an invalid argument
+		]
 	},
 		
 	// the selector that will be used to identify the local video container
@@ -61,101 +64,87 @@ var Rtc = function(config) {
 	// reference to localStream
 	this.localStream = null;
 	// array of connected peers
-	this.peers = [];
+	this.peers = {};
 	// array of channels
-	this.channels = [];
+	this.channels = {};
 	
 	// connect to the signaling server
-	var signaller = this.connect(config);
+	this.signaller = this.connect(config);
 	
 	// if we have constraints, then capture video
 	if(config.constraints) {
-		this.localVideo(signaller, config);
+		this.localVideo(this.signaller, config);
 	}
 };
 
 /**
  * This method connects to the signalling server and sets up handling of each
  * of the signals that are handled on the client.
+ * 
+ * @param config an array of configuration options
+ * 
+ * @return the signaller
  */
 Rtc.prototype.connect = function(config) {
 	// create signaling server
 	var socket = io(config.signaller);
 	
 	// handle socket events
-	socket.on('connect', this.connected(socket, config));
-	socket.on('reconnect', this.reconnect(socket, config));
+	socket.on('connect', this.handleConnect(socket, config));
+	socket.on('reconnect', this.handleReconnect(socket, config));
 	
-	// implement signals
-	socket.on('peer:announce', this.call(socket, config));
-	socket.on('peer:update', this.update(socket, config));
-	socket.on('peer:call', this.answer(socket, config));
-	socket.on('peer:accept', this.accept(socket, config));
-	socket.on('peer:ice', this.addIceCandidate(socket, config));
-	socket.on('peer:disconnect', this.removeRemoteVideos(socket, config));
+	// handle signals
+	socket.on('peer:announce', this.handleAnnounce(socket, config));
+	socket.on('peer:update', this.handleUpdate(socket, config));
+	socket.on('peer:call', this.handleCall(socket, config));
+	socket.on('peer:accept', this.handleAccept(socket, config));
+	socket.on('peer:ice', this.handleIce(socket, config));
+	socket.on('peer:disconnect', this.handleDisconnect(socket, config));
 
 	return socket;
 };
 
-Rtc.prototype.connected = function(socket, config) {
+/**
+ * This event is triggered upon connecting to the signalling server.
+ * 
+ * @param socket the signalling server connection
+ * @param config an array of configuration options
+ * 
+ * @returns {Function} the event handler
+ */
+Rtc.prototype.handleConnect = function(socket, config) {
 	var _this = this;
 	
 	return function(data) {
+		console.log('connect');
+		
 		_this.id = socket.id;
 	}
 };
 
-Rtc.prototype.reconnect = function(socket, config) {
+/**
+ * This event is triggered upon reconnecting to the signalling server.
+ * 
+ * @param socket the signalling server connection
+ * @param config an array of configuration options
+ * 
+ * @returns {Function} the event handler
+ */
+Rtc.prototype.handleReconnect = function(socket, config) {
 	var _this = this;
 	
 	return function(data) {
+		console.log('reconnect');
+		
 		socket.emit('update', { room: config.room, peerId: _this.id });
 		_this.id = socket.id; // store new id
 	}
 };
 
 /**
- * This method creates an RTCPeerConnection that can be used for communication
- * with a remote user.
- * 
- * @param peerId the identifier of the peer we are connecting too
- * @param socket the signalling server used for initial peer communications
- * @param config the RTCConfiguration properties 
- * 
- * @return an RTCPeerConnection object
- */
-Rtc.prototype.createPeerConnection = function(peerId, socket, config) {
-	// TODO var pc = new RTCPeerConnection( { iceServers: ((config || {}).ice || []) } );
-	var pc = new RTCPeerConnection(null);
-	pc.onicecandidate = this.icecandidate(peerId, socket);
-	pc.onaddstream = this.remoteVideo(peerId, config);
-	
-	// add the local stream
-	if(this.localStream) {
-		pc.addStream(this.localStream);
-	}
-	
-	// add the connection to the peer list
-	this.peers[peerId] = pc;
-	
-	if(((config || {}).channels || {}).chat) {
-		// create a data channel for chat based communication
-		var dc = pc.createDataChannel(null);
-		// dc.onopen =
-		dc.onmessage = this.message(config);
-		// dc.onbufferedamountlow =
-		// dc.onclose = 
-		// dc.onerror
-		
-		this.channels[peerId] = dc;
-	}
-	
-	return pc;
-};
-
-/**
- * This function generates is the event handling method for the peer:announce 
- * signal.  The client is initiating a call to a remote peer.
+ * This function generates the event handler for the peer:announce event.  Such
+ * an event is generated by the signalling server whenever a new client joins
+ * an existing room.
  * 
  * 1.  creates an RTCPeerConnection object
  * 2.  creates an SDP offer
@@ -165,37 +154,39 @@ Rtc.prototype.createPeerConnection = function(peerId, socket, config) {
  * @param socket the signalling server connection
  * @param config configuration options
  * 
- * @return the signal handling function
+ * @returns {Function} the event handler
  */
-Rtc.prototype.call = function(socket, config) {
+Rtc.prototype.handleAnnounce = function(socket, config) {
 	var _this = this;
 	
 	// closure to ensure the correct scope for the event listener
 	return function(data) {
 		// create RTCPeerConnection
 		var pc = _this.createPeerConnection(data.peerId, socket, config);
+		var dc = _this.createDataChannel(data.peerId, pc, config);
 		
-		// TODO aPromise = pc.createOffer([options]);
-		new Promise(function(resolve, reject) {
-			console.log('createOffer');
-			pc.createOffer(resolve, reject); // successCallback, failureCallback[, options]
-		}).then(function(offer) {
-			new Promise(function(resolve, reject) {
-				console.log('setLocalDescription');
-				pc.setLocalDescription(offer, resolve, reject); // sessionDescription, successCallback, failureCallback
-			}).then(function() {
-				// call the peer
-				socket.emit('peer:call', { 'from': socket.id, 'to': data.peerId, 'sdp' : pc.localDescription });
-			}).catch(_this.handleError);
+		pc.createOffer().then(function(offer) {
+			return pc.setLocalDescription(offer);
+		}).then(function() {
+			socket.emit('peer:call', { 'from': socket.id, 'to': data.peerId, 'sdp' : pc.localDescription });
 		}).catch(_this.handleError);
 	}
 };
 
-Rtc.prototype.update = function(socket, config) {
+/**
+ * This function generates the event handler for the peer:update event.  Such
+ * an event is generated by the signalling server whenever a client reconnects.
+ * 
+ * @param socket the signalling server connection
+ * @param config an array of configuration options
+ * 
+ * @returns {Function} the event handler
+ */
+Rtc.prototype.handleUpdate = function(socket, config) {
 	var _this = this;
 	
 	return function(data) {
-		console.log(data);
+		console.log('peer:update');
 		// a possible alternative may be to use the 
 		// RTCPeerConnection.peerIdentity property, although this would need
 		// to be submitted to the signalling server
@@ -216,8 +207,8 @@ Rtc.prototype.update = function(socket, config) {
 };
 
 /**
- * This function generates the event handling method for the peer:call signal.
- * The client is responding to a call offer from a remote peer.
+ * This function generates the event handler for the peer:call signal.  Such an
+ * event is generated by remote peers responding to an sdp offer.
  * 
  * 1.  creates an RTCPeerConnection object
  * 2.  sets the remote description associated with the connection
@@ -226,47 +217,43 @@ Rtc.prototype.update = function(socket, config) {
  * 5.  sends the answer via the signalling server
  * 
  * @param socket the signalling server connection
- * @praam config configuration options
+ * @param config an array of configuration options
  * 
- * @return the signal handling function
+ * @returns {Function} the event handler
  */
-Rtc.prototype.answer = function(socket, config) {
+Rtc.prototype.handleCall = function(socket, config) {
 	var _this = this;
 	
 	// closure to ensure the correct scope for the event listener
 	return function(data) {
 		var pc = _this.createPeerConnection(data.peerId, socket, config);
 		
-		new Promise(function(resolve, reject) {
-			console.log('setRemoteDescription');
-			pc.setRemoteDescription(new RTCSessionDescription(data.sdp), resolve, reject); // sessionDescription, successCallback, errorCallback
-		}).then(new function() {
+		console.log('setRemoteDescription');
+		pc.setRemoteDescription(new RTCSessionDescription(data.sdp), function() {
 			console.log('createAnswer');
 			pc.createAnswer(function(answer) {
-				new Promise(function(resolve, reject) {
-					console.log('setLocalDescription');
-					pc.setLocalDescription(answer, resolve, reject); // sessionDescription, successCallback, failureCallback
-				}).then(function() {
+				console.log('setLocalDescription');
+				pc.setLocalDescription(new RTCSessionDescription(answer), function() {
 					// accept the call
 					socket.emit('peer:accept', { 'from': socket.id, 'to': data.peerId, 'sdp' : answer });
-				}).catch(_this.handleError);
+				}, _this.handleError);
 			}, _this.handleError);
-		}).catch(_this.handleError);
+		}, _this.handleError);
 	}
 };
 
 /**
- * This functions generates the event handling method for the peer:accept
- * signal.  The client has received an answer to an offer from a remote peer.
+ * This functions generates the event handler for the peer:accept signal.  
+ * Such an event is generated whenever a response is received for an sdp offer.
  * 
  * 1.  sets the remote description associated with the connection
  * 
  * @param socket the signalling server connection
- * @param config configuration options
+ * @param config an array of configuration options
  * 
- * @return the signal handling function
+ * @returns {Function} the event handler
  */
-Rtc.prototype.accept = function(socket, config) {
+Rtc.prototype.handleAccept = function(socket, config) {
 	var _this = this;
 	
 	// closure to ensure the correct scope for the event listener
@@ -278,7 +265,7 @@ Rtc.prototype.accept = function(socket, config) {
 			new Promise(function(resolve, reject) {
 				console.log('setRemoteDescription');
 				pc.setRemoteDescription(new RTCSessionDescription(data.sdp), resolve, reject); // sessionDescription, successCallback, errorCallback
-			}).catch(_this.handleError);
+			})/* TODO .catch(_this.handleError) */;
 		} else {
 			_this.handleError("missing RTCPeerConnection for peer " + data.peerId);
 		}
@@ -286,30 +273,16 @@ Rtc.prototype.accept = function(socket, config) {
 };
 
 /**
- * This function generates the event handling method for the onicecandidate
- * event handler of an RTCPeerConnection.
+ * This function generates the event handler for the the peer:ice signal.  Such
+ * an event is generated when a new ICE candidate arrives over the signalling 
+ * channel.
  * 
- * @param @peerId the identifier of the remote peer
- * @param @socket the signalling server connection
+ * @param socket the signalling server connection
+ * @param config an array of configuration options
  * 
- * @return the event handling function
+ * @returns {Function} the event handler
  */
-Rtc.prototype.icecandidate = function(peerId, socket) {
-	// closure to ensure the correct scope for the event listener
-	return function(event) {
-		if(event.candidate) {
-			// sent to peer
-			socket.emit('peer:candidate', { 'from': socket.id, 'to': peerId, 'candidate' : event.candidate });
-		}
-	}
-};
-
-/**
- * This function generates the event handling method for the peer:ice signal.
- * 
- * @return the signal handling function
- */
-Rtc.prototype.addIceCandidate = function() {
+Rtc.prototype.handleIce = function(socket, config) {
 	var _this = this;
 	
 	// closure to ensure the correct scope for the event listener
@@ -320,10 +293,7 @@ Rtc.prototype.addIceCandidate = function() {
 			var candidate = new RTCIceCandidate(data.candidate);
 			
 			console.log('addIceCandidate');
-			// This should return a promise, however during testing, it appears
-			// that it doesn't hence the no-error handling version being used
-			// TODO pc.addIceCandidate(candidate).catch(this.handleError);
-			pc.addIceCandidate(candidate);
+			pc.addIceCandidate(candidate).catch(this.handleError);
 		} else {
 			_this.handleError("missing RTCPeerConnection for peer " + data.peerId);
 		}
@@ -331,28 +301,231 @@ Rtc.prototype.addIceCandidate = function() {
 };
 
 /**
- * This function captures the local stream.
+ * This function generates the event handler for the peer:disconnect signal.  
+ * It removes the remote video element and removes the remote peer from the 
+ * peer list.
  * 
- * @param constraints the constraints used for getUserMedia
- * @param options additional configuration options
- * 
- * @return a Promise object
+ * @return the signal handling function
  */
-Rtc.prototype.capture = function(constraints, options) {
-	return navigator.mediaDevices.getUserMedia(constraints);
+Rtc.prototype.handleDisconnect = function() {
+	var _this = this;
+	
+	return function(data) {
+		console.log('peer:disconnect');
+		var peerId = data.peerId;
+		var nodes = document.querySelectorAll('[data-peer="' + peerId + '"]');
+		
+		// remove from remote video container
+		for(var i=0;i<nodes.length;i++) {
+			var el = nodes[i];
+			el.parentNode.removeChild(el);
+		}
+		
+		// remove from peer list
+		delete _this.peers[peerId];
+	}
+};
+
+/**
+ * Creates and returns a new RTCPeerConnection object.
+ * 
+ * @param peerId the identifier of the peer we are connecting too
+ * @param socket the signalling server used for initial peer communications
+ * @param config the RTCConfiguration properties 
+ * 
+ * @return an RTCPeerConnection object
+ */
+Rtc.prototype.createPeerConnection = function(peerId, socket, config) {
+	var servers = { 
+		iceServers: ((config || {}).ice || defaultConfig.ice)
+	};
+	
+	var constraints = {
+		optional: (((config || {}).channels).optional) || defaultConfig.channels.optional
+	};
+	constraints = null;
+	
+	var pc = new RTCPeerConnection(servers, constraints);
+	pc.onaddstream = this.handleAddStream(peerId, config);
+	pc.ondatachannel = this.handleDataChannel(peerId, config);
+	pc.onicecandidate = this.handleIceCandidate(peerId, socket);
+	// oniceconnectionstatechange
+	// onidentityresult
+	// onidpasserionerror
+	// onidpvalidationerror
+	// onnegotiationneeded
+	// onpeeridentity
+	// onremovestream
+	pc.onremovestream = this.handleRemoveStream(peerId, config);
+	// onsignalingstatechange
+	
+	// add the local stream
+	if(this.localStream) {
+		pc.addStream(this.localStream);
+	}
+	
+	// add the connection to the peer list
+	this.peers[peerId] = pc;
+	
+	return pc;
+};
+
+/**
+ * This function generates the event handler for the addstream event of a
+ * RTCPeerConnection object.  Such an event is sent when a MediaStream is added 
+ * to this connection by the remote peer. The event is sent immediately after 
+ * the call RTCPeerConnection.setRemoteDescription() and doesn't wait for the 
+ * result of the SDP negotiation.
+ * 
+ * @param @peerId the identifier of the remote peer
+ * @param @socket the signalling server connection
+ * 
+ * @return the event handler
+ */
+Rtc.prototype.handleAddStream = function(peerId, config) {
+	var _this = this;
+	
+	// closure to ensure the correct scope for the event listener
+	return function(event) {
+		var mediaStream = event.stream;
+		
+		var video = _this.attach(mediaStream, config.options);
+		video.classList.add('video', 'remote-video'); // TODO configurable
+		
+		// override for remote audio
+		var opts = { audio: { enabled: 'fa-volume-up', disabled: 'fa-volume-off' } }; // TODO configurable
+		opts = Object.assign({}, ((config || defaultConfig).options || defaultConfig.options).controls, { controls: opts });
+		var controls = _this.attachControls(mediaStream, opts.controls);
+		
+		var videoStreamContainer = document.createElement('div');
+		videoStreamContainer.setAttribute('id', mediaStream.id);
+		videoStreamContainer.setAttribute('data-peer', peerId);
+		videoStreamContainer.classList.add('video-stream-container'); // TODO configurable
+		videoStreamContainer.appendChild(video);
+		videoStreamContainer.appendChild(controls);
+		
+		var remoteContainer = document.querySelector((config || {}).remoteContainer || R_VIDEO);
+		remoteContainer.appendChild(videoStreamContainer);
+	}
+};
+
+/**
+ * This function generates the event handler for the datachannel event of a 
+ * RTCPeerConnection object.  Such an event is sent when a RTCDataChannel is 
+ * added to this connection.
+ * 
+ * @param peerId the identifier of the remote peer
+ * @param config the signaling server connection
+ * 
+ * @return the event handler
+ */
+Rtc.prototype.handleDataChannel = function(peerId, config) {
+	var _this = this;
+	
+	return function(event) {
+		console.log("ondatachannel");
+		
+		var dc = event.channel;
+		
+		dc.onmessage = _this.handleMessage(peerId, config);
+		dc.onopen = _this.handleOpen(peerId, config);
+		dc.onclose = _this.handleClose(peerId, config);
+		
+		_this.channels[peerId] = dc;
+	}
+};
+
+/**
+ * This function generates the event handler for the icecandidate event of a
+ * RTCPeerConnection object.  Such an event is sent when a RTCICECandidate 
+ * object is added to the script.
+ *  
+ * @param peerId the identifier of the remote peer
+ * @param socket the signalling server connection
+ * 
+ * @return the event handling function
+ */
+Rtc.prototype.handleIceCandidate = function(peerId, socket) {
+	// closure to ensure the correct scope for the event listener
+	return function(event) {
+		if(event.candidate) {
+			// sent to peer
+			socket.emit('peer:candidate', { 'from': socket.id, 'to': peerId, 'candidate' : event.candidate });
+		}
+	}
+};
+
+Rtc.prototype.handleRemoveStream = function(peerId, socket) {
+	// closure to ensure the correct scope for the event listener
+	return function(event) {
+		var mediaStream = event.stream;
+
+		var el = document.getElementById(mediaStream.id);
+		el.parentNode.removeChild(el);
+	}
+};
+
+Rtc.prototype.createDataChannel = function(peerId, pc, config) {
+	var options = {
+		reliable: false // Chrome doesn't support reliable DataChannels
+	}
+	
+	if(((config || {}).channels || {}).chat) {
+		// create a data channel for chat based communication
+		var dc = pc.createDataChannel('chat', options);
+		dc.onopen = this.handleOpen(peerId, config);
+		dc.onmessage = this.handleMessage(peerId, config);
+		// dc.onbufferedamountlow =
+		dc.onclose = this.handleClose(peerId, config);
+		dc.onerror = this.handleError;
+			
+		this.channels[peerId] = dc;
+	}
+};
+
+Rtc.prototype.handleOpen = function(peerId, config) {
+	var _this = this;
+	
+	return function(event) {
+		console.log("onopen");
+	}
+};
+
+Rtc.prototype.handleClose = function(peerId, config) {
+	return function(event) {
+		console.log("onclose");
+	}
+};
+
+Rtc.prototype.handleMessage = function(peerId, config) {
+	var _this = this;
+	
+	return function(event) {
+		console.log("onmessage");
+		_this.attachMessage(event.data, config.options);
+	}
+};
+
+/**
+ * The generic error handler for the Rtc object.  It simply logs messages to
+ * the console.
+ */
+Rtc.prototype.handleError = function(err) {
+	console.log(err);
+	console.log(err.stack);
 };
 
 /**
  * This function attaches a stream to a DOM element and returns the DOM element
  * to which it was attached.
  * 
- * @param stream the stream to attach
+ * @param mediaStream the stream to attach
  * @param options an array of options that contains information about if the
  * stream should be muted or an existing element should be used.
  * 
  * @return the Element to which the video was attached
  */
-Rtc.prototype.attach = function(stream, options) {
+Rtc.prototype.attach = function(mediaStream, options) {
 	var URL = typeof window != 'undefined' && window.URL;
 
 	// allows for one parameter to be passed in
@@ -373,16 +546,16 @@ Rtc.prototype.attach = function(stream, options) {
 		return el;
 	}
 	
-	function attachToElement(stream, options) {
+	function attachToElement(mediaStream, options) {
 		var autoplay = (options || {}).autoplay;
 		var elType = 'audio';
 		var el = (options || {}).el || (options || {}).target;
 
 		// check the stream is valid
-		var isValid = stream && typeof stream.getVideoTracks == 'function';
+		var isValid = mediaStream && typeof mediaStream.getVideoTracks == 'function';
 
 		// determine the element type
-		if(isValid && stream.getVideoTracks().length > 0) {
+		if(isValid && mediaStream.getVideoTracks().length > 0) {
 			elType = 'video';
 		}
 
@@ -394,13 +567,13 @@ Rtc.prototype.attach = function(stream, options) {
 		// prepare the element
 		el = el || document.createElement(elType);
 
-		// attach the stream
+		// attach the mediaStream
 		if(URL && URL.createObjectURL) {
-			el.src = URL.createObjectURL(stream);
+			el.src = URL.createObjectURL(mediaStream);
 	    } else if(el.srcObject) {
-	    	el.srcObject = stream;
+	    	el.srcObject = mediaStream;
 	    } else if(el.mozSrcObject) {
-	    	el.mozSrcObject = stream;
+	    	el.mozSrcObject = mediaStream;
 	    }
 
 	    if(autoplay === undefined || autoplay) {
@@ -411,19 +584,19 @@ Rtc.prototype.attach = function(stream, options) {
 	    return applyModifications(el, options);
 	}
 	
-	return attachToElement(stream, options);
+	return attachToElement(mediaStream, options);
 };
 
 /**
  * This function attaches a stream to a DOM element and returns the DOM element
  * to which it was attached.
  * 
- * @param stream the stream to attach
+ * @param mediaStream the stream to attach
  * @param options an array of options
  * 
  * @return the Element to which the video was attached
  */
-Rtc.prototype.attachControls = function(stream, options) {
+Rtc.prototype.attachControls = function(mediaStream, options) {
 	var _this = this;
 	
 	// allows for one parameter to be passed in
@@ -431,7 +604,7 @@ Rtc.prototype.attachControls = function(stream, options) {
 		options = defaultConfig.options.controls;
 	}
 	
-	function attachToElement(stream, options) {
+	function attachToElement(mediaStream, options) {
 		var audio = (options || defaultConfig.options.controls).audio;
 		var video = (options || defaultConfig.options.controls).video;
 		var frameRate = (options || defaultConfig.options.controls).frameRate;
@@ -447,7 +620,7 @@ Rtc.prototype.attachControls = function(stream, options) {
 			var button = document.createElement("button");
 			button.classList.add('button', 'audio-button'); // TODO configurable
 			button.appendChild(i);
-			button.addEventListener('click', _this.toggleAudio(stream, options));
+			button.addEventListener('click', _this.toggleAudio(mediaStream, options));
 			
 			el.appendChild(button);
 		}
@@ -459,7 +632,7 @@ Rtc.prototype.attachControls = function(stream, options) {
 			var button = document.createElement("button");
 			button.classList.add('button', 'video-button'); // TODO configurable
 			button.appendChild(i);
-			button.addEventListener('click', _this.toggleVideo(stream, options));
+			button.addEventListener('click', _this.toggleVideo(mediaStream, options));
 			
 			el.appendChild(button);
 		}
@@ -473,7 +646,7 @@ Rtc.prototype.attachControls = function(stream, options) {
 			slider.setAttribute('max', (frameRate || {}).max || defaultConfig.options.frameRate.max);
 			slider.setAttribute('step', (frameRate || {}).step || defaultConfig.options.frameRate.step);
 			slider.classList.add('slider', 'slider-frame-rate'); // TODO configurable
-			slider.addEventListener('change', _this.toggleFrameRate(stream, options));
+			slider.addEventListener('change', _this.toggleFrameRate(mediaStream, options));
 			
 			el.appendChild(slider);
 		}
@@ -481,7 +654,7 @@ Rtc.prototype.attachControls = function(stream, options) {
 		return el;
 	}
 
-	return attachToElement(stream, options);
+	return attachToElement(mediaStream, options);
 };
 
 /**
@@ -493,13 +666,13 @@ Rtc.prototype.attachControls = function(stream, options) {
  * 
  * @return the Element to which the video was attached
  */
-Rtc.prototype.attachLocal = function(stream, options) {
+Rtc.prototype.attachLocal = function(mediaStream, options) {
 	// allows for one parameter to be passed in
 	if(typeof options == 'undefined') {
 		options = {};
 	}
 	
-	return this.attach(stream, { muted: true, mirror: true });
+	return this.attach(mediaStream, { muted: true, mirror: true });
 }
 
 /**
@@ -512,25 +685,26 @@ Rtc.prototype.attachLocal = function(stream, options) {
 Rtc.prototype.localVideo = function(socket, config) {
 	var _this = this;
 	
-	this.capture(config.constraints, config.options)
-	.then(function(stream) {
+	navigator.mediaDevices.getUserMedia(config.constraints)
+	.then(function(mediaStream) {
 		// store reference to local stream
-		_this.localStream = stream;
+		_this.localStream = mediaStream;
 		
 		for(var i=0;i<_this.peers.length;i++) {
 			var peer = _this.peers[i];
-			peer.addStream(stream); // set local stream
+			peer.addStream(mediaStream); // set local stream
 		}
 		
 		// announce we are ready for conference
 		socket.emit('announce', { room: config.room });
 		
-		return stream;
-	}).then(function(stream) {
-		var video = _this.attachLocal(stream, config.options);
+		return mediaStream;
+	}).then(function(mediaStream) {
+		// TODO consolidate options
+		var video = _this.attach(mediaStream, { muted: true, mirror: true });
 		video.classList.add('video', 'local-video'); // TODO configurable
 		
-		var controls = _this.attachControls(stream, (config.options || defaultConfig.options).controls);
+		var controls = _this.attachControls(mediaStream, (config.options || defaultConfig.options).controls);
 		
 		var videoStreamContainer = document.createElement('div');
 		videoStreamContainer.classList.add('video-stream-container'); // TODO configurable
@@ -541,90 +715,7 @@ Rtc.prototype.localVideo = function(socket, config) {
 		localContainer.insertBefore(videoStreamContainer, localContainer.childNodes[0]);
 		
 		return localContainer;
-	}).catch(this.handleError);
-};
-
-/**
- * This function generates the event handler for onaddstream of the
- * RTCPeerConnection object.
- * 
- * @param @peerId the identifier of the remote peer
- * @param @socket the signalling server connection
- * 
- * @return the event handling function
- */
-Rtc.prototype.remoteVideo = function(peerId, config) {
-	var _this = this;
-	
-	// closure to ensure the correct scope for the event listener
-	return function(event) {
-		var stream = event.stream;
-		
-		var video = _this.attach(stream, config.options);
-		video.classList.add('video', 'remote-video'); // TODO configurable
-		
-		// override for remote audio
-		var opts = { audio: { enabled: 'fa-volume-up', disabled: 'fa-volume-off' } }; // TODO configurable
-		opts = Object.assign({}, ((config || defaultConfig).options || defaultConfig.options).controls, { controls: opts });
-		var controls = _this.attachControls(stream, opts.controls);
-		
-		var videoStreamContainer = document.createElement('div');
-		videoStreamContainer.setAttribute('data-peer', peerId);
-		videoStreamContainer.classList.add('video-stream-container'); // TODO configurable
-		videoStreamContainer.appendChild(video);
-		videoStreamContainer.appendChild(controls);
-		
-		var remoteContainer = document.querySelector((config || {}).remoteContainer || R_VIDEO);
-		remoteContainer.appendChild(videoStreamContainer);
-	}
-};
-
-/**
- * This function generates the event handler for the peer:disconnect signal.  
- * It removes the remote video element and removes the remote peer from the 
- * peer list.
- * 
- * @return the signal handling function
- */
-Rtc.prototype.removeRemoteVideos = function() {
-	var _this = this;
-	
-	return function(data) {
-		console.log('removeRemoteVideos');
-		var peerId = data.peerId;
-		var nodes = document.querySelectorAll('[data-peer="' + peerId + '"]');
-		
-		// remove from remote video container
-		for(var i=0;i<nodes.length;i++) {
-			var el = nodes[i];
-			el.parentNode.removeChild(el);
-		}
-		
-		// remove from peer list
-		delete _this.peers[peerId];
-	}
-};
-
-Rtc.prototype.message = function(config) {
-	var _this = this;
-	
-	return function(event) {
-		var div = document.createElement('div');
-		div.classList.add('message');
-		div.textContent = event.data;
-		
-		var messageContainer = document.querySelector('.message-container'); // TODO configurable
-		messageContainer.appendChild(div);
-	}
-};
-
-/**
- * The generic error handler for the Rtc object.  It simply logs messages to
- * the console.
- */
-Rtc.prototype.handleError = function(err) {
-	console.log(err);
-	console.log(err.stack);
+	})/* TODO.catch(this.handleError)*/;
 };
 
 /**
@@ -636,13 +727,13 @@ Rtc.prototype.handleError = function(err) {
  * 
  * @return the event handling function
  */
-Rtc.prototype.toggleAudio = function(stream, options) {
+Rtc.prototype.toggleAudio = function(mediaStream, options) {
 	var _this = this;
 	var audio = (options || {}).audio;
 	
 	return function(event) {
-		if(stream) {
-			var audioTracks = stream.getAudioTracks();
+		if(mediaStream) {
+			var audioTracks = mediaStream.getAudioTracks();
 		
 			if(audioTracks[0]) {
 				audioTracks[0].enabled = !audioTracks[0].enabled;
@@ -665,13 +756,13 @@ Rtc.prototype.toggleAudio = function(stream, options) {
  * 
  * @return the event handling function
  */
-Rtc.prototype.toggleVideo = function(stream, options) {
+Rtc.prototype.toggleVideo = function(mediaStream, options) {
 	var _this = this;
 	var video = (options || {}).video;
 	
 	return function(event) {
-		if(stream) {
-			var videoTracks = stream.getVideoTracks();
+		if(mediaStream) {
+			var videoTracks = mediaStream.getVideoTracks();
 			
 			if(videoTracks[0]) {
 				videoTracks[0].enabled = !videoTracks[0].enabled;
@@ -684,23 +775,34 @@ Rtc.prototype.toggleVideo = function(stream, options) {
 	}
 };
 
-Rtc.prototype.toggleFrameRate = function(stream, options) {
+Rtc.prototype.toggleFrameRate = function(mediaStream, options) {
 	var _this = this;
 	var opts = (options || {}).frameRate;
 	
 	return function(event) {
-		if(stream) {
-			var videoTracks = stream.getVideoTracks();
+		if(mediaStream) {
+			var videoTracks = mediaStream.getVideoTracks();
 			
 			if(videoTracks[0]) {
 				videoTracks[0].applyConstraints({ frameRate: event.currentTarget.value })
-				.catch(this.handleError);
+				.error(this.handleError);
 			}
 		}
 	}
 };
 
-Rtc.prototype.sendMessage = function(stream, options) {
+Rtc.prototype.attachMessage = function(data, options) {
+	var text = document.createTextNode(data);
+	
+	var div = document.createElement('div');
+	div.classList.add('message'); // TODO configurable
+	div.appendChild(text);
+
+	var messageContainer = document.querySelector('.message-container');
+	messageContainer.appendChild(div);
+};
+
+Rtc.prototype.sendMessage = function(mediaStream, options) {
 	var _this = this;
 	
 	return function(event) {
@@ -709,23 +811,19 @@ Rtc.prototype.sendMessage = function(stream, options) {
 		input.value = null;
 		
 		if(message) {
-			for(var i=0;i<_this.channels.length;i++) {
-				var channel = _this.channels[i];
-				channel.send(message);
+			var keys = Object.keys(_this.channels);
+			for(var i=0;i<keys.length;i++) {
+				var key = keys[i];
+				var dc = _this.channels[key];
+				
+				if(dc.readyState == 'open') {
+					dc.send(message);
+				} else {
+					console.log("RTCDataChannel.readyState is not 'open'");
+				}
 			}
 	
-			var span = document.createElement('span');
-			span.textContent = 'You:';
-			
-			var text = document.createTextNode(message);
-			
-			var div = document.createElement('div');
-			div.classList.add('message');
-			div.appendChild(span);
-			div.appendChild(text);
-	
-			var messageContainer = document.querySelector('.message-container');
-			messageContainer.appendChild(div);
+			_this.attachMessage(message, options);
 		}
 	}
 };

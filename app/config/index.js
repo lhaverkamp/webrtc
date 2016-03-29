@@ -1,19 +1,18 @@
 var fs = require('fs'),
-	defaults = require('cog/defaults'),
+	merge = require('merge'),
 	path = require('path');
 
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
 
 var all = {
 	host: process.env.HOST || '127.0.0.1',
-	port: process.env.PORT || '8443',
+	port: process.env.PORT || '3000',
 	
 	key: './app/config/keys/server.key',
 	cert: './app/config/keys/server.crt'
 };
 
-var config = defaults(
-	{},
+var config = merge(
 	all,
 	fs.readFileSync(path.join(__dirname, process.env.NODE_ENV + ".json"))
 ); 

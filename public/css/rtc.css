@@ -110,5 +110,5 @@ body {
 }
 
 .message-container .message span:after {
-	content: ' ';
+	content: ': ';
 }
