@@ -1,6 +1,23 @@
+## [1.3.0](https://github.com/lhaverkamp/webrtc/tag/1.3.0) - 2016.03.28
+### Added
+- multi-to-multi communication
+- ability to have chat via RTCDataChannel
+- basic styling
+
+### Changed
+- replaced cog/defaults with merge
+- default port from 8443 to 3000 (NodeJS default)
+
 ## [1.2.0](https://github.com/lhaverkamp/webrtc/tag/1.2.0) - 2016.03.16
 ### Added
-- dynamic room creationg [#1] (https://github.com/lhaverkamp/webrtc/issues/1)
+- dynamic room creation [#1] (https://github.com/lhaverkamp/webrtc/issues/1)
+
+### Changed
+- replaced merge with cog/defaults
+
+## [1.2.0](https://github.com/lhaverkamp/webrtc/tag/1.2.0) - 2016.03.16
+### Added
+- dynamic room creation [#1] (https://github.com/lhaverkamp/webrtc/issues/1)
 
 ### Changed
 - replaced merge with cog/defaults
