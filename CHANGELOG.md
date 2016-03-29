@@ -1,3 +1,7 @@
+## [1.3.1](https://github.com/lhaverkamp/webrtc/tag/1.3.1) - 2016.03.28
+### Removed
+- `appear.in.css` that was checked in on accident
+
 ## [1.3.0](https://github.com/lhaverkamp/webrtc/tag/1.3.0) - 2016.03.28
 ### Added
 - multi-to-multi communication
